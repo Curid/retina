@@ -6,7 +6,7 @@
 
 use bytes::{Buf, Bytes};
 
-use crate::{rtp::ReceivedPacket, PacketContext, Timestamp};
+use crate::{rtp::ReceivedPacket, PacketContext, Timestamp, VideoTimestamp};
 
 use super::{VideoFrame, VideoParameters};
 
@@ -312,6 +312,7 @@ impl Depacketizer {
         let loss = pkt.loss();
         let stream_id = pkt.stream_id();
         let timestamp = pkt.timestamp();
+
         let last_packet_in_frame = pkt.mark();
 
         let mut payload = pkt.into_payload_bytes();
@@ -472,6 +473,13 @@ impl Depacketizer {
             }
 
             let has_new_parameters = self.parameters != metadata.parameters;
+
+            let timestamp = VideoTimestamp {
+                pts: timestamp.timestamp(),
+                dts: timestamp.timestamp(),
+                clock_rate: timestamp.clock_rate(),
+                start: timestamp.start(),
+            };
 
             self.pending = Some(VideoFrame {
                 start_ctx: metadata.start_ctx,
