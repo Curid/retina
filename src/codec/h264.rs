@@ -1114,6 +1114,8 @@ enum PacketizerState {
 mod tests {
     use std::num::NonZeroU32;
 
+    use crate::codec::h264::DepacketizerInputState::PreMark;
+    use crate::rtp::ReceivedPacket;
     use crate::testutil::init_logging;
     use crate::{codec::CodecItem, rtp::ReceivedPacketBuilder};
 
@@ -1709,5 +1711,57 @@ mod tests {
         };
         assert!(frame.has_new_parameters);
         assert!(d.parameters().is_some());
+    }
+
+    #[test]
+    fn v380_pro() {
+        init_logging();
+        const PARAMS: &str = "fmtp:96 profile-level-id=TeAo;packetization-mode=1;\
+                              sprop-parameter-sets=J03gKI1oCgPaEAAAAwAQAAADAoDxQio=,KO4C0kg=";
+
+        let mut d = super::Depacketizer::new(90_000, Some(PARAMS)).unwrap();
+
+        fn test_packet<P: IntoIterator<Item = u8>>(mark: bool, data: P) -> ReceivedPacket {
+            ReceivedPacketBuilder {
+                ctx: crate::PacketContext::dummy(),
+                stream_id: 0,
+                timestamp: crate::Timestamp {
+                    timestamp: 0,
+                    clock_rate: NonZeroU32::new(90_000).unwrap(),
+                    start: 0,
+                },
+                ssrc: 0,
+                sequence_number: 0,
+                loss: 0,
+                mark,
+                payload_type: 96,
+            }
+            .build(data)
+            .unwrap()
+        }
+
+        d.push(test_packet(
+            false,
+            *include_bytes!("./testdata/v830_pro_seq1-17.raw"),
+        ))
+        .unwrap();
+
+        d.push(test_packet(
+            true,
+            *include_bytes!("./testdata/v830_pro_seq18.raw"),
+        ))
+        .unwrap();
+        assert!(d.pull().is_none());
+        match d.input_state {
+            PreMark(_) => {}
+            _ => panic!(),
+        }
+
+        // bad sps
+        d.push(test_packet(
+            true,
+            *include_bytes!("./testdata/v830_pro_seq19.raw"),
+        ))
+        .unwrap();
     }
 }
